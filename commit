@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""
+commit.py — Tek dosyalık Git yardımcısı
+Kullanım:
+  commit init [remote_url] [branch]
+  commit <dosya> -m "mesaj" [-p] [-pf]
+  commit . -m "her şey" -p
+"""
+
+import sys
+import subprocess
+import argparse
+
+
+def run(cmd: list[str], check=True) -> subprocess.CompletedProcess:
+    """Komutu çalıştır, çıktıyı göster."""
+    print(f"  → {' '.join(cmd)}")
+    return subprocess.run(cmd, check=check)
+
+
+def current_branch() -> str:
+    result = subprocess.run(
+        ["git", "branch", "--show-current"],
+        capture_output=True, text=True, check=True
+    )
+    return result.stdout.strip() or "main"
+
+
+def cmd_init(remote: str | None, branch: str):
+    """git init + remote ekle + branch oluştur."""
+    run(["git", "init"])
+    if remote:
+        run(["git", "remote", "add", "origin", remote])
+        print(f"  ✓ Remote eklendi: {remote}")
+    run(["git", "checkout", "-b", branch])
+    print(f"\n✅ Repo hazır. Branch: {branch}")
+
+
+def cmd_commit(files: list[str], message: str, push: bool, force: bool):
+    """git add + commit + (opsiyonel) push."""
+    # git add
+    run(["git", "add"] + files)
+
+    # git commit
+    run(["git", "commit", "-m", message])
+
+    # push
+    if push:
+        branch = current_branch()
+        push_cmd = ["git", "push", "origin", branch]
+        if force:
+            push_cmd.append("--force")
+        run(push_cmd)
+        action = "Force push" if force else "Push"
+        print(f"\n✅ {action} tamamlandı → origin/{branch}")
+    else:
+        print("\n✅ Commit atıldı.")
+
+
+def main():
+    args = sys.argv[1:]
+
+    if not args:
+        print(__doc__)
+        sys.exit(0)
+
+    # --- init komutu ---
+    if args[0] == "init":
+        # commit init [remote] [branch]
+        remote = args[1] if len(args) > 1 else None
+        branch = args[2] if len(args) > 2 else "main"
+        cmd_init(remote, branch)
+        return
+
+    # --- commit komutu ---
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("files", nargs="+")
+    parser.add_argument("-m", "--message", required=True)
+    parser.add_argument("-p", "--push", action="store_true")
+    parser.add_argument("-pf", "--force-push", action="store_true")
+
+    try:
+        parsed = parser.parse_args(args)
+    except SystemExit:
+        print("Kullanım: commit <dosya(lar)> -m 'mesaj' [-p] [-pf]")
+        sys.exit(1)
+
+    cmd_commit(
+        files=parsed.files,
+        message=parsed.message,
+        push=parsed.push or parsed.force_push,
+        force=parsed.force_push,
+    )
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except subprocess.CalledProcessError as e:
+        print(f"\n❌ Komut başarısız: {e}")
+        sys.exit(e.returncode)
+    except KeyboardInterrupt:
+        print("\nİptal edildi.")
+        sys.exit(1)
